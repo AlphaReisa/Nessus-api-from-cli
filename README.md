@@ -30,9 +30,7 @@ To download the script directly to your user folder without using a browser, run
 ```powershell
 iwr -useb "https://raw.githubusercontent.com/AlphaReisa/nessus-api-from-cli/main/scripts/launch-scan.ps1" -OutFile "$HOME\launch-scan.ps1"
 ```
-```powershell
-iwr -useb "https://raw.githubusercontent.com/AlphaReisa/nessus-api-from-cli/main/scripts/launch-legacy.ps1" -OutFile "$HOME\launch-legacy.ps1"
-```
+
 ## Troubleshooting
 
 ### Error: "Api is not available"
@@ -40,9 +38,6 @@ Nessus returns this error if security headers are missing. this script resolves 
 * **x-api-token**: dynamically extracted from the web client.
 * **x-cookie**: session token obtained during authentication.
 * **origin/referer**: headers used to validate the request source.
-
-### Error in powershell 5.1
-If you use the simplified command in ps 5.1, you will encounter an ssl certificate error. please use the compatible version provided in the cmd section, which implements the `icertificatepolicy` interface.
 
 ---
 
