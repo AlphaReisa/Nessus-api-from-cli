@@ -10,6 +10,16 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$ExportToken,
 
+    # Parámetros configurables por instancia
+    [Parameter(Mandatory=$false)]
+    [string]$Url = "https://127.0.0.1:8834",
+
+    [Parameter(Mandatory=$false)]
+    [string]$User = "admin",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Pass = "admin",
+
     [Parameter(Mandatory=$false)]
     [string]$ScanId = "6",
 
@@ -17,29 +27,28 @@ param(
     [string]$OutputDir = "C:\Users\nessus\Documents\reportes"
 )
 
-# --- configuration ---
-$url = "https://127.0.0.1:8834"
-$user = "admin"
-$pass = "admin"
+# Configuración del agente
 $agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 # Función para realizar login y obtener tokens
 function Get-NessusSession {
+    param($Url, $User, $Pass, $Agent)
+
     # 1. Obtener API Token dinámico
-    $js_data = curl.exe -s -k -H "User-Agent: $agent" "$url/nessus6.js"
+    $js_data = curl.exe -s -k -H "User-Agent: $Agent" "$Url/nessus6.js"
     $api_token = ([regex]::Match($js_data, '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')).Value
-    if (-not$api_token) { throw "could not retrieve api token" }
+    if (-not $api_token) { throw "could not retrieve api token" }
 
     # 2. Login
-    $raw_json = @{ username = $user; password = $pass } | ConvertTo-Json -Compress
-    $session_data = $raw_json | curl.exe -s -k -X POST "$url/session" `
+    $raw_json = @{ username = $User; password = $Pass } | ConvertTo-Json -Compress
+    $session_data = $raw_json | curl.exe -s -k -X POST "$Url/session" `
         -H "Content-Type: application/json" `
-        -H "User-Agent: $agent" `
+        -H "User-Agent: $Agent" `
         -H "Connection: close" `
         -d "@-"
     
     $token = ($session_data | ConvertFrom-Json -ErrorAction SilentlyContinue).token
-    if (-not$token) { throw "login failed" }
+    if (-not $token) { throw "login failed" }
 
     return @{
         Token    = $token
@@ -48,19 +57,19 @@ function Get-NessusSession {
 }
 
 try {
-    # Iniciar sesión al principio de cada ejecución
-    $session = Get-NessusSession
+    # Iniciar sesión con los parámetros recibidos
+    $session = Get-NessusSession -Url $Url -User $User -Pass $Pass -Agent $agent
     $token = $session.Token
     $api_token = $session.ApiToken
 
     switch ($Action) {
         "launch" {
-            $response = curl.exe -s -k -X POST "$url/scans/$ScanId/launch" `
+            $response = curl.exe -s -k -X POST "$Url/scans/$ScanId/launch" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
-                -H "Origin: $url" `
-                -H "Referer: $url/" `
-                -H "User-Agent: $agent" `
+                -H "Origin: $Url" `
+                -H "Referer: $Url/" `
+                -H "User-Agent: $Agent" `
                 -H "Accept: application/json"
             
             $uuid = ($response | ConvertFrom-Json -ErrorAction SilentlyContinue).scan_uuid
@@ -71,10 +80,10 @@ try {
         "check-scan" {
             if (-not $TargetUuid) { throw "TargetUuid es obligatorio para check-scan" }
             
-            $details_json = curl.exe -s -k -X GET "$url/scans/$ScanId" `
+            $details_json = curl.exe -s -k -X GET "$Url/scans/$ScanId" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
-                -H "User-Agent: $agent"
+                -H "User-Agent: $Agent"
 
             $details = $details_json | ConvertFrom-Json
             $item = $details.history | Where-Object { $_.uuid -eq $TargetUuid }
@@ -87,11 +96,11 @@ try {
         }
 
         "resume" {
-            $response = curl.exe -s -k -X POST "$url/scans/$ScanId/resume" `
+            $response = curl.exe -s -k -X POST "$Url/scans/$ScanId/resume" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
                 -H "Accept: application/json" `
-                -H "User-Agent: $agent"
+                -H "User-Agent: $Agent"
 
             Write-Host "status: resumed"
             Write-Host "$response"
@@ -110,11 +119,11 @@ try {
                 plugin_detail_locale = "en";
             } | ConvertTo-Json -Compress
 
-            $export_response = $export_body | curl.exe -s -k -X POST "$url/scans/$ScanId/export" `
+            $export_response = $export_body | curl.exe -s -k -X POST "$Url/scans/$ScanId/export" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
                 -H "Content-Type: application/json" `
-                -H "User-Agent: $agent" `
+                -H "User-Agent: $Agent" `
                 -d "@-"
 
             $export_token = ($export_response | ConvertFrom-Json -ErrorAction SilentlyContinue).token
@@ -128,10 +137,10 @@ try {
         "check-export" {
             if (-not $ExportToken) { throw "ExportToken es obligatorio para check-export" }
             
-            $status_response = curl.exe -s -k -X GET "$url/tokens/$ExportToken/status" `
+            $status_response = curl.exe -s -k -X GET "$Url/tokens/$ExportToken/status" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
-                -H "User-Agent: $agent"
+                -H "User-Agent: $Agent"
 
             $status = ($status_response | ConvertFrom-Json -ErrorAction SilentlyContinue).status
             if ($status) {
@@ -150,10 +159,10 @@ try {
 
             $output_path = Join-Path $OutputDir "scan_report_$ExportToken.pdf"
 
-            curl.exe -k -X GET "$url/tokens/$ExportToken/download" `
+            curl.exe -k -X GET "$Url/tokens/$ExportToken/download" `
                 -H "X-Cookie: token=$token" `
                 -H "X-API-Token: $api_token" `
-                -H "User-Agent: $agent" `
+                -H "User-Agent: $Agent" `
                 -o $output_path
 
             Write-Host "$output_path"
